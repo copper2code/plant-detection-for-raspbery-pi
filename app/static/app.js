@@ -5,9 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Camera Elements
     const video = document.getElementById('camera-stream');
-    const canvas = document.getElementById('camera-canvas');
     const captureBtn = document.getElementById('capture-btn');
-    const switchCameraBtn = document.getElementById('switch-camera-btn');
     const scanningAnim = document.getElementById('scanning-anim');
     
     // Upload Elements
@@ -23,9 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const resetBtn = document.getElementById('reset-btn');
     
     // State
-    let currentStream = null;
     let fallbackImageData = null;
-    let isFrontCamera = false;
 
     // --- Tab Switching ---
     tabs.forEach(tab => {
@@ -36,70 +32,29 @@ document.addEventListener('DOMContentLoaded', () => {
             tab.classList.add('active');
             const target = document.getElementById(tab.dataset.target);
             target.classList.add('active');
-
-            if (tab.dataset.target === 'camera-tab') {
-                startCamera();
-            } else {
-                stopCamera();
-            }
         });
     });
 
-    // --- Camera Logic ---
-    async function startCamera() {
-        if (currentStream) stopCamera();
-
-        const constraints = {
-            video: {
-                facingMode: isFrontCamera ? "user" : "environment",
-                width: { ideal: 1024 },
-                height: { ideal: 1024 }
-            }
-        };
-
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia(constraints);
-            currentStream = stream;
-            video.srcObject = stream;
-        } catch (err) {
-            console.error("Camera access error:", err);
-            // Show alert in case of HTTP on local network IP
-            alert("Unable to access camera: " + err.message + "\\n\\nNote: Browsers block camera access unless you are using 'localhost' or an 'https://' connection.\\nIf using 192.168.x.x, please use the Upload feature instead.");
-            
-            // Switch back to upload tab
-            document.querySelector('[data-target="upload-tab"]').click();
-        }
-    }
-
-    function stopCamera() {
-        if (currentStream) {
-            currentStream.getTracks().forEach(track => track.stop());
-            currentStream = null;
-        }
-    }
-
-    switchCameraBtn.addEventListener('click', () => {
-        isFrontCamera = !isFrontCamera;
-        startCamera();
-    });
-
-    captureBtn.addEventListener('click', () => {
-        if (!currentStream) return;
-
+    captureBtn.addEventListener('click', async () => {
         // Visual feedback
         captureBtn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Analyzing...';
         captureBtn.disabled = true;
         scanningAnim.classList.remove('hidden');
 
-        // Draw video frame to canvas
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        canvas.getContext('2d').drawImage(video, 0, 0);
-        
-        const base64Image = canvas.toDataURL('image/jpeg', 0.9);
-        
-        // Send to API
-        analyzeImage(base64Image);
+        try {
+            const response = await fetch('/predict_camera', { method: 'POST' });
+            const data = await response.json();
+            if (response.ok) {
+                showResults(data);
+            } else {
+                alert("Error from server: " + (data.error || "Unknown"));
+                resetUI();
+            }
+        } catch (error) {
+            console.error("Network error:", error);
+            alert("Failed to connect to the prediction server.");
+            resetUI();
+        }
     });
 
     // --- Upload Logic ---
@@ -250,6 +205,4 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Start camera on load
-    startCamera();
 });

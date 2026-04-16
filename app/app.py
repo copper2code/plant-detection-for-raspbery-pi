@@ -1,12 +1,15 @@
 import os, sys, json, base64, io
 from pathlib import Path
 
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, Response
 from flask_cors import CORS
 from PIL import Image
 import torch
 import torch.nn as nn
 from torchvision import transforms
+import cv2
+import time
+import threading
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 BASE_DIR = Path(__file__).parent.parent   # plant-detection/
@@ -258,6 +261,45 @@ model.load_state_dict(state)
 model.eval()
 print(f"[BOOT] Model ready ({len(CLASS_NAMES)} classes)")
 
+# ── OpenCV Camera Setup ───────────────────────────────────────────────────────
+class Camera:
+    def __init__(self):
+        self.video = cv2.VideoCapture(0)
+        time.sleep(1.0)
+        self.lock = threading.Lock()
+    
+    def get_frame(self):
+        with self.lock:
+            success, image = self.video.read()
+            if not success:
+                return None
+            return image
+    
+    def get_frame_bytes(self):
+        frame = self.get_frame()
+        if frame is None:
+            return None
+        ret, buffer = cv2.imencode('.jpg', frame)
+        return buffer.tobytes()
+
+camera_instance = None
+try:
+    camera_instance = Camera()
+except Exception as e:
+    print(f"[WARN] Could not initialize camera: {e}")
+
+def gen_frames():
+    global camera_instance
+    if camera_instance is None:
+        return
+    while True:
+        frame_bytes = camera_instance.get_frame_bytes()
+        if frame_bytes is None:
+            time.sleep(0.1)
+            continue
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+
 # ── Flask app ─────────────────────────────────────────────────────────────────
 app = Flask(__name__)
 CORS(app)
@@ -318,6 +360,63 @@ def predict():
             "top3":          top3_list,
         })
 
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/video_feed")
+def video_feed():
+    return Response(gen_frames(),
+                    mimetype='multipart/x-mixed-replace; boundary=frame')
+
+@app.route("/predict_camera", methods=["POST"])
+def predict_camera():
+    global camera_instance
+    if camera_instance is None:
+        return jsonify({"error": "Camera not available on backend"}), 500
+    
+    try:
+        frame_bytes = camera_instance.get_frame_bytes()
+        if frame_bytes is None:
+            return jsonify({"error": "Failed to capture frame from camera"}), 500
+            
+        image = Image.open(io.BytesIO(frame_bytes)).convert("RGB")
+        
+        # Run inference
+        tensor = INFERENCE_TRANSFORM(image).unsqueeze(0).to(DEVICE)
+        with torch.no_grad():
+            logits = model(tensor)
+            probs  = torch.softmax(logits, dim=1)[0]
+            top_idx = torch.argmax(probs).item()
+
+        class_name = CLASS_NAMES[top_idx]
+        confidence = round(probs[top_idx].item() * 100, 2)
+
+        # Top-3 predictions
+        top3 = torch.topk(probs, 3)
+        top3_list = [
+            {"class": CLASS_NAMES[i], "confidence": round(probs[i].item() * 100, 2)}
+            for i in top3.indices.tolist()
+        ]
+
+        treatment = TREATMENTS.get(class_name, {
+            "status": "unknown",
+            "severity": "unknown",
+            "steps": ["No specific treatment data available."],
+            "prevention": "Consult a local agricultural extension office.",
+        })
+
+        display_name = class_name.replace("___", " — ").replace("__", " — ").replace("_", " ")
+
+        return jsonify({
+            "class_name":    class_name,
+            "display_name":  display_name,
+            "confidence":    confidence,
+            "status":        treatment["status"],
+            "severity":      treatment["severity"],
+            "steps":         treatment["steps"],
+            "prevention":    treatment["prevention"],
+            "top3":          top3_list,
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

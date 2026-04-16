@@ -48,8 +48,7 @@
 
                 <div class="tab-content active" id="camera-tab">
                     <div class="camera-container">
-                        <video id="camera-stream" autoplay playsinline></video>
-                        <canvas id="camera-canvas" style="display: none;"></canvas>
+                        <img id="camera-stream" src="/video_feed" alt="Connecting to Pi Camera...">
                         
                         <div class="scanning-overlay hidden" id="scanning-anim">
                             <div class="scan-line"></div>
@@ -58,9 +57,6 @@
                         <div class="camera-controls">
                             <button id="capture-btn" class="btn btn-primary btn-large">
                                 <i class="ri-camera-lens-fill"></i> Capture Photo
-                            </button>
-                            <button id="switch-camera-btn" class="btn btn-icon">
-                                <i class="ri-camera-switch-line"></i>
                             </button>
                         </div>
                     </div>
