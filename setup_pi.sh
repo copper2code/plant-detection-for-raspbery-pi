@@ -39,7 +39,8 @@ echo "[4/5] Installing Python requirements..."
 source venv/bin/activate
 pip install --upgrade pip
 # Set index-url mapping for piwheels just in case it helps find pre-compiled packages on Raspberry Pi
-pip install --extra-index-url https://www.piwheels.org/simple -r requirements.txt
+# And set the CPU-only pytorch index so we don't accidentally download 4GB of NVIDIA CUDA toolkits
+pip install --extra-index-url https://download.pytorch.org/whl/cpu --extra-index-url https://www.piwheels.org/simple -r requirements.txt
 
 # 5. Setup systemd service for running at boot
 echo "[5/5] Setting up systemd service to run at boot..."
