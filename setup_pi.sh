@@ -20,10 +20,10 @@ sudo apt-get update
 # 2. Install system dependencies for OpenCV and building python packages
 echo "[2/4] Installing system dependencies..."
 sudo apt-get install -y python3-venv python3-dev \
-    libopenblas-dev libgl1-mesa-glx libglib2.0-0 \
+    libopenblas-dev libgl1 libglib2.0-0 \
     libjpeg-dev libpng-dev libtiff-dev \
     libavcodec-dev libavformat-dev libswscale-dev libv4l-dev \
-    libxvidcore-dev libx264-dev libqt5gui5 libqt5webkit5 libqt5test5 libqt5core5a
+    libxvidcore-dev libx264-dev
 
 # 3. Create Virtual Environment
 echo "[3/4] Creating Python virtual environment (venv)..."
