@@ -35,17 +35,49 @@ else
 fi
 
 # 4. Install Requirements
-echo "[4/4] Installing Python requirements..."
+echo "[4/5] Installing Python requirements..."
 source venv/bin/activate
 pip install --upgrade pip
-pip install -r requirements.txt
+# Set index-url mapping for piwheels just in case it helps find pre-compiled packages on Raspberry Pi
+pip install --extra-index-url https://www.piwheels.org/simple -r requirements.txt
+
+# 5. Setup systemd service for running at boot
+echo "[5/5] Setting up systemd service to run at boot..."
+PROJECT_DIR="$(pwd)"
+CURRENT_USER="$USER"
+
+cat <<EOF | sudo tee /etc/systemd/system/plantcare.service > /dev/null
+[Unit]
+Description=PlantCare Pi Web Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=$CURRENT_USER
+Group=$CURRENT_USER
+WorkingDirectory=$PROJECT_DIR
+Environment="PATH=$PROJECT_DIR/venv/bin"
+ExecStart=$PROJECT_DIR/venv/bin/python app/app.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable plantcare.service --now
 
 echo "================================================="
 echo "Setup Complete! 🎉"
-echo "To start the application:"
+echo "The application has been installed as a background service."
+echo "It will automatically start whenever the Raspberry Pi boots."
 echo ""
-echo "  source venv/bin/activate"
-echo "  python app/app.py"
+echo "To check the status of the service:"
+echo "  sudo systemctl status plantcare.service"
 echo ""
-echo "Then open a browser to http://<YOUR_PI_IP>:5000"
+echo "To view live logs:"
+echo "  sudo journalctl -u plantcare.service -f"
+echo ""
+echo "Open a browser to http://<YOUR_PI_IP>:5000"
 echo "================================================="
