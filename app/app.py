@@ -269,9 +269,12 @@ class Camera:
         self.video.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         self.video.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self.video.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        self.video.set(cv2.CAP_PROP_FPS, 30)
         time.sleep(1.0)
         self.lock = threading.Lock()
         self.current_frame = None
+        self.current_frame_bytes = None
+        self.frame_id = 0
         
         # Start a background thread to continually grab frames
         self.running = True
@@ -282,8 +285,13 @@ class Camera:
         while self.running:
             success, image = self.video.read()
             if success:
-                with self.lock:
-                    self.current_frame = image
+                # Encode the frame in the background thread to save CPU
+                ret, buffer = cv2.imencode('.jpg', image, [cv2.IMWRITE_JPEG_QUALITY, 70])
+                if ret:
+                    with self.lock:
+                        self.current_frame = image
+                        self.current_frame_bytes = buffer.tobytes()
+                        self.frame_id += 1
             else:
                 time.sleep(0.01)
 
@@ -292,14 +300,14 @@ class Camera:
             if self.current_frame is None:
                 return None
             return self.current_frame.copy()
+
+    def get_frame_data(self):
+        with self.lock:
+            return self.current_frame_bytes, self.frame_id
     
     def get_frame_bytes(self):
-        frame = self.get_frame()
-        if frame is None:
-            return None
-        # Compress with slightly lower quality for better streaming performance
-        ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
-        return buffer.tobytes()
+        with self.lock:
+            return self.current_frame_bytes
 
 camera_instance = None
 try:
@@ -311,15 +319,21 @@ def gen_frames():
     global camera_instance
     if camera_instance is None:
         return
+    last_frame_id = -1
     while True:
-        frame_bytes = camera_instance.get_frame_bytes()
+        frame_bytes, frame_id = camera_instance.get_frame_data()
         if frame_bytes is None:
             time.sleep(0.1)
             continue
+            
+        if frame_id == last_frame_id:
+            # We already sent this frame, wait a bit for a new one
+            time.sleep(0.01)
+            continue
+            
+        last_frame_id = frame_id
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-        # Limit to ~30 FPS
-        time.sleep(1.0 / 30.0)
 
 # ── Flask app ─────────────────────────────────────────────────────────────────
 app = Flask(__name__)
