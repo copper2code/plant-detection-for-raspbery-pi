@@ -23,6 +23,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // State
     let fallbackImageData = null;
 
+    // Check camera availability
+    fetch('/health')
+        .then(res => res.json())
+        .then(data => {
+            if (data.camera_available === false) {
+                document.getElementById('camera-available-view').classList.add('hidden');
+                document.getElementById('camera-unavailable-view').classList.remove('hidden');
+            }
+        })
+        .catch(err => console.error("Health check failed:", err));
+
     // --- Tab Switching ---
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {

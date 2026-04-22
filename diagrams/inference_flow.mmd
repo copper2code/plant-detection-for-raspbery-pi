@@ -1,0 +1,19 @@
+sequenceDiagram
+    participant User
+    participant Frontend
+    participant FlaskAPI
+    participant Camera
+    participant PyTorchModel
+    
+    User->>Frontend: Clicks "Capture Image"
+    Frontend->>FlaskAPI: POST /predict_camera
+    FlaskAPI->>Camera: Request Frame
+    Camera-->>FlaskAPI: Return JPEG Bytes
+    FlaskAPI->>FlaskAPI: Base64 Decode & PIL Open
+    FlaskAPI->>FlaskAPI: Apply Inference Transform (Resize/Normalize)
+    FlaskAPI->>PyTorchModel: Forward Pass (Tensor)
+    PyTorchModel-->>FlaskAPI: Logits / Softmax Probabilities
+    FlaskAPI->>FlaskAPI: Get Top-1 and Top-3 Classes
+    FlaskAPI->>FlaskAPI: Lookup Treatment Recommendations
+    FlaskAPI-->>Frontend: JSON Response (Class, Confidence, Treatment)
+    Frontend-->>User: Display Results & Recommendations

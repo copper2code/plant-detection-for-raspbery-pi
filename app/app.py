@@ -265,21 +265,40 @@ print(f"[BOOT] Model ready ({len(CLASS_NAMES)} classes)")
 class Camera:
     def __init__(self):
         self.video = cv2.VideoCapture(0)
+        # Optimize for lower latency
+        self.video.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        self.video.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        self.video.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         time.sleep(1.0)
         self.lock = threading.Lock()
-    
+        self.current_frame = None
+        
+        # Start a background thread to continually grab frames
+        self.running = True
+        self.thread = threading.Thread(target=self._update, daemon=True)
+        self.thread.start()
+
+    def _update(self):
+        while self.running:
+            success, image = self.video.read()
+            if success:
+                with self.lock:
+                    self.current_frame = image
+            else:
+                time.sleep(0.01)
+
     def get_frame(self):
         with self.lock:
-            success, image = self.video.read()
-            if not success:
+            if self.current_frame is None:
                 return None
-            return image
+            return self.current_frame.copy()
     
     def get_frame_bytes(self):
         frame = self.get_frame()
         if frame is None:
             return None
-        ret, buffer = cv2.imencode('.jpg', frame)
+        # Compress with slightly lower quality for better streaming performance
+        ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
         return buffer.tobytes()
 
 camera_instance = None
@@ -299,6 +318,8 @@ def gen_frames():
             continue
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+        # Limit to ~30 FPS
+        time.sleep(1.0 / 30.0)
 
 # ── Flask app ─────────────────────────────────────────────────────────────────
 app = Flask(__name__)
@@ -422,7 +443,12 @@ def predict_camera():
 
 @app.route("/health")
 def health():
-    return jsonify({"status": "ok", "classes": len(CLASS_NAMES)})
+    global camera_instance
+    return jsonify({
+        "status": "ok", 
+        "classes": len(CLASS_NAMES),
+        "camera_available": camera_instance is not None
+    })
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)

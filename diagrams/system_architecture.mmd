@@ -1,0 +1,26 @@
+graph TD
+    subgraph Hardware Layer
+        A[Raspberry Pi 4/5]
+        B[USB Camera Module]
+    end
+
+    subgraph Software Stack
+        C[Systemd Service]
+        D[Flask Web Server]
+        E[PyTorch Inference Engine]
+        F[OpenCV Video Capture]
+    end
+
+    subgraph Client / User Interface
+        G[Web Browser]
+        H[HTML/JS/CSS UI]
+    end
+
+    %% Connections
+    B -- "Video Stream" --> F
+    C -- "Manages" --> D
+    F -- "Frames" --> D
+    D -- "Image Tensor" --> E
+    E -- "Predictions" --> D
+    D -- "HTTP/REST API" --> H
+    H -- "User Interaction" --> G

@@ -1,0 +1,26 @@
+graph TD
+    A[PlantVillage Dataset] --> B[Data Preprocessing]
+    
+    subgraph Optimised DataLoader
+        B --> C[Data Augmentation]
+        C --> D[Resize to 224x224]
+        D --> E[Normalisation]
+        E --> F[Batched Tensors]
+    end
+
+    subgraph GPU Training Loop GTX 1650
+        F --> G[Custom CNN Forward Pass]
+        G --> H[AMP Automatic Mixed Precision]
+        H --> I[Gradient Accumulation]
+        I --> J[Backpropagation]
+        J --> K[AdamW Optimizer Step]
+    end
+
+    subgraph Evaluation
+        K --> L[Validation Loss & Accuracy]
+        L -- "Improvement?" --> M{Early Stopping}
+        M -- "Yes" --> N[Save best_model.pth]
+        M -- "No" --> O[Continue Training]
+    end
+    
+    N --> P[Export to ONNX]
